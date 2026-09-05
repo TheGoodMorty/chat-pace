@@ -1,0 +1,5 @@
+# Patch applied by `dsh plugin add TheGoodMorty/chat-pace` — inserts this
+# plugin into the active profile's composition.
+- insert:
+    - id: chat-pace
+      name: chat-pace

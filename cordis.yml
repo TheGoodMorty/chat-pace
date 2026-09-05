@@ -1,0 +1,6 @@
+# Package-level composition for chat-pace. Only read if this package is
+# listed in dsh.profile.bundles; the active profile wires it through
+# cordis.patch.yml instead. Kept aligned with that row.
+- insert:
+    - id: chat-pace
+      name: chat-pace

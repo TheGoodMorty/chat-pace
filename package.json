@@ -1,0 +1,38 @@
+{
+  "name": "chat-pace",
+  "version": "1.0.0",
+  "description": "Configurable chat auto-scroll for the DSH web UI: follow, smooth glide, paced section-by-section reading, stepping, and hold modes, with on-screen controls, hotkeys, and a settings page (conversation.input.left / conversation.composer.dock / conversation.session.header.actions / settings.section entries).",
+  "type": "module",
+  "main": "src/host.js",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "node --check src/host.js && node --check src/client.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "chat",
+    "auto-scroll",
+    "reading-pace"
+  ],
+  "author": "TheGoodMorty",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheGoodMorty/chat-pace.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
