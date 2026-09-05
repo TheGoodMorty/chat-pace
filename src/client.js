@@ -823,6 +823,31 @@
         } else {
           // read phase: tall sections drift through their remainder
           var endY = engine.readThroughEnd
+          if ((endY === null || endY === undefined) && engine.readSectionKey) {
+            // safety net: beginRead might have skipped the drift (e.g. the
+            // section was still rendering and offsetHeight looked short), or
+            // the section grew after the read started. If the row's bottom
+            // is still below the viewport, set up a drift to show it using
+            // whatever pause time remains.
+            var lrow = rowByKey(el, engine.readSectionKey)
+            if (lrow) {
+              var lvh = el.clientHeight || 600
+              var ltop = el.scrollTop + flowTopOf(el, lrow)
+              var lbottom = ltop + lrow.offsetHeight
+              if (lbottom > el.scrollTop + lvh + 4) {
+                var lEndY = Math.min(lbottom - lvh + 16, floorOf(el))
+                if (lEndY > el.scrollTop + 4) {
+                  var remainMs = engine.readUntil - now()
+                  if (remainMs > 250) {
+                    engine.readThroughEnd = lEndY
+                    engine.readThroughSpeed = (lEndY - el.scrollTop) / (remainMs / 1000)
+                    endY = lEndY
+                    slog('late-drift ' + Math.round(lEndY - el.scrollTop) + 'px')
+                  }
+                }
+              }
+            }
+          }
           if (endY !== null && endY !== undefined && el.scrollTop < endY - 2) {
             var sp = engine.readThroughSpeed > 0 ? engine.readThroughSpeed : currentSpeed()
             el.scrollTop = Math.min(endY, el.scrollTop + sp * dt)
@@ -873,12 +898,17 @@
         if (row && h > vh - 24) {
           // section taller than the viewport: spend the pause drifting
           // through it at a speed that makes the drift last exactly pauseMs
-          var endY = el.scrollTop + flowTopOf(el, row) + h - vh + 16
+          var driftDistance = h - vh + 16
+          var endY = el.scrollTop + flowTopOf(el, row) + driftDistance
           var floor = floorOf(el)
           if (endY > floor) endY = floor
           if (endY > el.scrollTop + 4) {
             engine.readThroughEnd = endY
-            engine.readThroughSpeed = (endY - el.scrollTop) / Math.max(0.25, pauseMs / 1000)
+            // Use the full drift distance for speed, so we move at reading
+            // pace through the visible portion; the clamped endY is just
+            // where we stop (and wait out the remaining pause if we hit
+            // the floor early, which happens for the last section).
+            engine.readThroughSpeed = driftDistance / Math.max(0.25, pauseMs / 1000)
             if (!engine.raf) {
               engine.lastFrame = 0
               engine.raf = requestAnimationFrame(cruiseFrame)
