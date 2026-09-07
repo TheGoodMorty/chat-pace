@@ -1878,21 +1878,22 @@
             })),
           createElement('p', { className: 'dsh-cp-toghint' }, 'Every conversation remembers where you left it regardless of this setting, so switching to \u201cWhere I left it\u201d later still restores each one.'),
           createElement('h2', { className: 'dsh-cp-h2' }, 'Navigation buttons'),
+          createElement('p', { className: 'dsh-cp-toghint' }, 'All four round buttons stack in one vertical column at the bottom-right of the chat, filling out the built-in Back-to-bottom arrow into a full set of page handles. Each one only appears when it is useful and its toggle is on.'),
           createElement('div', { className: 'dsh-cp-togs' },
             createElement(ToggleRow, {
-              id: 'dsh-cp-t-navtop', label: 'Jump to top', hint: 'Round button at the top-right of the chat; appears when you are not at the top.',
+              id: 'dsh-cp-t-navtop', label: 'Jump to top', hint: 'Top button of the column; jumps to the start of the conversation and hides while you are at the top.',
               value: s.navJumpTop, onToggle: function (e) { set({ navJumpTop: e.target.checked }) }
             }),
             createElement(ToggleRow, {
-              id: 'dsh-cp-t-navup', label: 'Page up', hint: 'Round button at the top-right; appears when there is content above.',
+              id: 'dsh-cp-t-navup', label: 'Page up', hint: 'Second button of the column; scrolls up one page and hides while you are at the very top.',
               value: s.navPageUp, onToggle: function (e) { set({ navPageUp: e.target.checked }) }
             }),
             createElement(ToggleRow, {
-              id: 'dsh-cp-t-navdown', label: 'Page down', hint: 'Round button at the bottom-right; appears when there is content below.',
+              id: 'dsh-cp-t-navdown', label: 'Page down', hint: 'Third button of the column; scrolls down one page and hides while you are at the very bottom.',
               value: s.navPageDown, onToggle: function (e) { set({ navPageDown: e.target.checked }) }
             }),
             createElement(ToggleRow, {
-              id: 'dsh-cp-t-navbot', label: 'Jump to bottom', hint: 'Round button at the bottom-right; appears when you are not at the very bottom.',
+              id: 'dsh-cp-t-navbot', label: 'Jump to bottom', hint: 'Bottom button of the column, sitting in the Back-to-bottom arrow\u2019s spot; hides while you are already at the bottom.',
               value: s.navJumpBottom, onToggle: function (e) { set({ navJumpBottom: e.target.checked }) }
             })),
           createElement('h2', { className: 'dsh-cp-h2' }, 'Keyboard shortcuts'),
