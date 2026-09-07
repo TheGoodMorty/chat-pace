@@ -217,6 +217,10 @@
         paceArmed: false,
         userPaused: false,
         sectionsRead: 0,
+        // end-of-turn settle
+        settleGen: 0,
+        settleTimer: 0,
+        settleTicks: 0,
         // feeds
         sections: [],
         running: false,
@@ -692,6 +696,10 @@
           cancelAnimationFrame(engine.pendingRetarget)
           engine.pendingRetarget = 0
         }
+        if (engine.settleTimer) {
+          clearTimeout(engine.settleTimer)
+          engine.settleTimer = 0
+        }
         if (engine.ro) {
           engine.ro.disconnect()
           engine.ro = null
@@ -1004,6 +1012,7 @@
           slog('auto done')
           engine.phase = 'idle'
           engine.paceArmed = false
+          startSettle()
           notifyStatus()
           return
         }
@@ -1018,6 +1027,39 @@
         // fold; it is cruised to and read once it settles
         if (engine.tipText) saveAnchor(el)
         notifyStatus()
+      }
+
+      // end-of-turn settle: the turn has ended - finish at the very bottom
+      // of the conversation so the final output is fully on screen. The read
+      // of the last section ends at the section's own bottom; trailing rows
+      // (final tool cards, spacing, last-instant renders) can still sit below
+      // the fold. Rows sometimes finish rendering a beat AFTER the running
+      // flag flips, so this watches the floor for a short tail window and
+      // re-glides if late growth reopens the gap. The tail dies on any
+      // takeover: a new turn, a reader pause, a mode change, or a detach.
+      function startSettle() {
+        if (engine.settleTimer) { clearTimeout(engine.settleTimer); engine.settleTimer = 0 }
+        engine.settleGen++
+        engine.settleTicks = 0
+        settleTick(engine.settleGen)
+      }
+
+      function settleTick(gen) {
+        if (gen !== engine.settleGen) return
+        if (engine.running || engine.userPaused || engine.restoring) return
+        if (settings.mode !== 'paced') return
+        var el = port()
+        if (!el) return
+        var gap = floorOf(el) - el.scrollTop
+        if (gap > BOTTOM_EPS && engine.phase !== 'travel' && engine.phase !== 'read') {
+          slog('settle ' + Math.round(gap) + 'px')
+          startCruise('bottom', function (el2) { return floorOf(el2) })
+        }
+        if (++engine.settleTicks <= 8) {
+          engine.settleTimer = setTimeout(function () { settleTick(gen) }, 400)
+        } else {
+          engine.settleTimer = 0
+        }
       }
 
       // ---- feeds -----------------------------------------------------------
