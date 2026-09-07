@@ -97,6 +97,10 @@
           resumeAtBottom: false,
           stepSmooth: true,
           openPosition: 'top',
+          navJumpTop: true,
+          navPageUp: true,
+          navPageDown: true,
+          navJumpBottom: true,
           keys: { toggle: 'f9', next: 'ctrl+arrowdown', prev: 'ctrl+arrowup', latest: 'ctrl+end', cycle: '' }
         }
       }
@@ -156,6 +160,7 @@
           window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
         } catch (error) { /* storage full or blocked: settings stay in-memory */ }
         settingsListeners.forEach(function (fn) { fn() })
+        if (engine.nav) updateNav()
       }
 
       function useSettingValue() {
@@ -233,7 +238,14 @@
         sessionId: null,
         lastPosFlush: 0,
         restoring: false,
-        restoreGen: 0
+        restoreGen: 0,
+        // floating navigation buttons
+        nav: null,
+        navHost: null,
+        navBtns: null,
+        navScrollHandler: null,
+        navResize: null,
+        navWinResize: null
       }
 
       var statusListeners = new Set()
@@ -678,6 +690,7 @@
         } else if (settings.mode === 'smooth') {
           scheduleRetarget()
         }
+        ensureNav(el)
         notifyStatus()
       }
 
@@ -688,6 +701,7 @@
 
       function unbindAll() {
         var el = engine.el
+        removeNav()
         engine.el = null
         engine.binds = 0
         stopCruise()
@@ -717,6 +731,130 @@
           el.removeEventListener('pointerdown', onUserInput, { capture: true })
         }
         notifyStatus()
+      }
+
+      // ---- floating navigation buttons -----------------------------------
+      // Round buttons on the right edge of the chat: jump-to-top and page-up
+      // float at the top-right, page-down and jump-to-bottom at the bottom-
+      // right. Each shows only when it is useful (e.g. jump-to-bottom hides
+      // at the very bottom) and each is toggleable in Settings. A click is a
+      // deliberate reader action: it stops any auto-scroll and is marked as
+      // user input so the engine never counteracts it.
+      var NAV_ICONS = {
+        jumpTop: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V6"/><path d="M6 12l6-6 6 6"/><path d="M5 4h14"/></svg>',
+        pageUp: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>',
+        pageDown: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></svg>',
+        jumpBottom: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14"/><path d="M6 12l6 6 6-6"/><path d="M5 20h14"/></svg>'
+      }
+      var NAV_TITLES = {
+        jumpTop: 'Jump to top',
+        pageUp: 'Page up',
+        pageDown: 'Page down',
+        jumpBottom: 'Jump to bottom'
+      }
+
+      function ensureNav(el) {
+        var host = el.parentElement
+        if (!host) return
+        if (engine.navHost === host && engine.nav) return
+        removeNav()
+        engine.navHost = host
+        var c = document.createElement('div')
+        c.className = 'dsh-cp-nav'
+        c.setAttribute('data-dsh-cp-nav', '')
+        var top = document.createElement('div')
+        top.className = 'dsh-cp-nav-cluster dsh-cp-nav-top'
+        var bottom = document.createElement('div')
+        bottom.className = 'dsh-cp-nav-cluster dsh-cp-nav-bottom'
+        c.appendChild(top)
+        c.appendChild(bottom)
+        host.appendChild(c)
+        engine.nav = c
+        engine.navBtns = {}
+        var ids = ['jumpTop', 'pageUp', 'pageDown', 'jumpBottom']
+        for (var i = 0; i < ids.length; i++) {
+          var id = ids[i]
+          var b = document.createElement('button')
+          b.type = 'button'
+          b.className = 'dsh-cp-navbtn'
+          b.setAttribute('data-nav', id)
+          b.title = NAV_TITLES[id]
+          b.setAttribute('aria-label', NAV_TITLES[id])
+          b.innerHTML = NAV_ICONS[id]
+          b.addEventListener('click', function (ev) {
+            ev.preventDefault()
+            navTo(ev.currentTarget.getAttribute('data-nav'))
+          })
+          ;(id === 'jumpTop' || id === 'pageUp' ? top : bottom).appendChild(b)
+          engine.navBtns[id] = b
+        }
+        engine.navScrollHandler = function () { updateNav() }
+        el.addEventListener('scroll', engine.navScrollHandler, { passive: true })
+        if (typeof ResizeObserver === 'function') {
+          engine.navResize = new ResizeObserver(function () { positionNav() })
+          engine.navResize.observe(el)
+        }
+        engine.navWinResize = function () { positionNav() }
+        window.addEventListener('resize', engine.navWinResize)
+        positionNav()
+        updateNav()
+      }
+
+      function removeNav() {
+        if (engine.navScrollHandler && engine.el) {
+          engine.el.removeEventListener('scroll', engine.navScrollHandler)
+        }
+        if (engine.navResize) { engine.navResize.disconnect(); engine.navResize = null }
+        if (engine.navWinResize) { window.removeEventListener('resize', engine.navWinResize); engine.navWinResize = null }
+        if (engine.nav && engine.nav.parentElement) engine.nav.parentElement.removeChild(engine.nav)
+        engine.nav = null
+        engine.navHost = null
+        engine.navBtns = null
+        engine.navScrollHandler = null
+      }
+
+      function positionNav() {
+        var el = port()
+        if (!el || !engine.nav) return
+        var r = el.getBoundingClientRect()
+        var c = engine.nav
+        c.style.right = Math.max(8, window.innerWidth - r.right + 12) + 'px'
+        c.style.top = r.top + 'px'
+        c.style.bottom = (window.innerHeight - r.bottom) + 'px'
+      }
+
+      function updateNav() {
+        var el = port()
+        if (!el || !engine.nav || !engine.navBtns) return
+        var top = el.scrollTop
+        var floor = floorOf(el)
+        var atTop = top <= 4
+        var atBottom = floor - top <= 4
+        var b = engine.navBtns
+        b.jumpTop.hidden = atTop || !settings.navJumpTop
+        b.pageUp.hidden = atTop || !settings.navPageUp
+        b.pageDown.hidden = atBottom || !settings.navPageDown
+        b.jumpBottom.hidden = atBottom || !settings.navJumpBottom
+      }
+
+      function navTo(action) {
+        var el = port()
+        if (!el) return
+        engine.lastUserInputAt = now()
+        stopCruise()
+        var target
+        if (action === 'jumpTop') target = 0
+        else if (action === 'jumpBottom') target = floorOf(el)
+        else if (action === 'pageUp') target = Math.max(0, el.scrollTop - el.clientHeight)
+        else if (action === 'pageDown') target = Math.min(floorOf(el), el.scrollTop + el.clientHeight)
+        else return
+        if (action === 'jumpTop' || action === 'jumpBottom') {
+          el.scrollTop = target
+        } else {
+          el.scrollTo({ top: target, behavior: 'smooth' })
+        }
+        saveAnchor(el)
+        updateNav()
       }
 
       // ---- cruise loop ---------------------------------------------------
@@ -1710,6 +1848,24 @@
               }, o.label)
             })),
           createElement('p', { className: 'dsh-cp-toghint' }, 'Every conversation remembers where you left it regardless of this setting, so switching to \u201cWhere I left it\u201d later still restores each one.'),
+          createElement('h2', { className: 'dsh-cp-h2' }, 'Navigation buttons'),
+          createElement('div', { className: 'dsh-cp-togs' },
+            createElement(ToggleRow, {
+              id: 'dsh-cp-t-navtop', label: 'Jump to top', hint: 'Round button at the top-right of the chat; appears when you are not at the top.',
+              value: s.navJumpTop, onToggle: function (e) { set({ navJumpTop: e.target.checked }) }
+            }),
+            createElement(ToggleRow, {
+              id: 'dsh-cp-t-navup', label: 'Page up', hint: 'Round button at the top-right; appears when there is content above.',
+              value: s.navPageUp, onToggle: function (e) { set({ navPageUp: e.target.checked }) }
+            }),
+            createElement(ToggleRow, {
+              id: 'dsh-cp-t-navdown', label: 'Page down', hint: 'Round button at the bottom-right; appears when there is content below.',
+              value: s.navPageDown, onToggle: function (e) { set({ navPageDown: e.target.checked }) }
+            }),
+            createElement(ToggleRow, {
+              id: 'dsh-cp-t-navbot', label: 'Jump to bottom', hint: 'Round button at the bottom-right; appears when you are not at the very bottom.',
+              value: s.navJumpBottom, onToggle: function (e) { set({ navJumpBottom: e.target.checked }) }
+            })),
           createElement('h2', { className: 'dsh-cp-h2' }, 'Keyboard shortcuts'),
           createElement('div', { className: 'dsh-cp-keys' },
             KEY_ACTIONS.map(function (a) { return createElement(KeyRow, { key: a.id, action: a }) })),
@@ -1800,7 +1956,15 @@
         '.dsh-cp-keybtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary,#222)}',
         '.dsh-cp-keybtn-rec{color:var(--dsw-alias-state-business-primary,#7c8cff);border-color:var(--dsw-alias-state-business-primary,#7c8cff)}',
         '.dsh-cp-keywarn{color:var(--dsw-alias-state-error-primary,#d33);font-size:12px;width:100%}',
-        '.dsh-cp-maint{align-items:center;gap:10px;flex-direction:column;display:flex}'
+        '.dsh-cp-maint{align-items:center;gap:10px;flex-direction:column;display:flex}',
+        '.dsh-cp-nav{position:fixed;z-index:1000;pointer-events:none}',
+        '.dsh-cp-nav-cluster{position:absolute;right:0;display:flex;flex-direction:column;gap:8px;pointer-events:auto}',
+        '.dsh-cp-nav-top{top:12px}',
+        '.dsh-cp-nav-bottom{bottom:12px}',
+        '.dsh-cp-navbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.14));background:var(--dsw-alias-tooltip-bg,#fff);color:var(--dsw-alias-label-secondary,#555);box-shadow:var(--dsw-shadow-lv2,0 6px 24px rgba(0,0,0,.14))}',
+        '.dsh-cp-navbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary,#222)}',
+        '.dsh-cp-navbtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#7c8cff);outline-offset:1px}',
+        '.dsh-cp-navbtn[hidden]{display:none}'
       ].join('\n')
 
       // ------------------------------------------------------------------
