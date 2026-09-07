@@ -245,7 +245,10 @@
         navBtns: null,
         navScrollHandler: null,
         navResize: null,
-        navWinResize: null
+        navWinResize: null,
+        navMo: null,
+        navLastOffsetX: null,
+        navLastOffsetY: null
       }
 
       var statusListeners = new Set()
@@ -734,9 +737,10 @@
       }
 
       // ---- floating navigation buttons -----------------------------------
-      // Round buttons on the right edge of the chat: jump-to-top and page-up
-      // float at the top-right, page-down and jump-to-bottom at the bottom-
-      // right. Each shows only when it is useful (e.g. jump-to-bottom hides
+      // Round buttons in a vertical column on the right edge of the chat,
+      // styled to match the shipped "Back to bottom" button and sitting where
+      // that single arrow lives, fleshing it out into a full set of page
+      // handles. Each shows only when it is useful (e.g. jump-to-bottom hides
       // at the very bottom) and each is toggleable in Settings. A click is a
       // deliberate reader action: it stops any auto-scroll and is marked as
       // user input so the engine never counteracts it.
@@ -762,12 +766,6 @@
         var c = document.createElement('div')
         c.className = 'dsh-cp-nav'
         c.setAttribute('data-dsh-cp-nav', '')
-        var top = document.createElement('div')
-        top.className = 'dsh-cp-nav-cluster dsh-cp-nav-top'
-        var bottom = document.createElement('div')
-        bottom.className = 'dsh-cp-nav-cluster dsh-cp-nav-bottom'
-        c.appendChild(top)
-        c.appendChild(bottom)
         host.appendChild(c)
         engine.nav = c
         engine.navBtns = {}
@@ -785,19 +783,24 @@
             ev.preventDefault()
             navTo(ev.currentTarget.getAttribute('data-nav'))
           })
-          ;(id === 'jumpTop' || id === 'pageUp' ? top : bottom).appendChild(b)
+          c.appendChild(b)
           engine.navBtns[id] = b
         }
-        engine.navScrollHandler = function () { updateNav() }
+        engine.navScrollHandler = function () { refreshNav() }
         el.addEventListener('scroll', engine.navScrollHandler, { passive: true })
         if (typeof ResizeObserver === 'function') {
-          engine.navResize = new ResizeObserver(function () { positionNav() })
+          engine.navResize = new ResizeObserver(function () { refreshNav() })
           engine.navResize.observe(el)
         }
-        engine.navWinResize = function () { positionNav() }
+        // content growth without a scroll (view parked at top, rows added
+        // below) must re-evaluate which buttons are useful
+        if (typeof MutationObserver === 'function') {
+          engine.navMo = new MutationObserver(function () { refreshNav() })
+          engine.navMo.observe(el, { childList: true, subtree: true })
+        }
+        engine.navWinResize = function () { refreshNav() }
         window.addEventListener('resize', engine.navWinResize)
-        positionNav()
-        updateNav()
+        refreshNav()
       }
 
       function removeNav() {
@@ -805,6 +808,7 @@
           engine.el.removeEventListener('scroll', engine.navScrollHandler)
         }
         if (engine.navResize) { engine.navResize.disconnect(); engine.navResize = null }
+        if (engine.navMo) { engine.navMo.disconnect(); engine.navMo = null }
         if (engine.navWinResize) { window.removeEventListener('resize', engine.navWinResize); engine.navWinResize = null }
         if (engine.nav && engine.nav.parentElement) engine.nav.parentElement.removeChild(engine.nav)
         engine.nav = null
@@ -813,14 +817,39 @@
         engine.navScrollHandler = null
       }
 
+      function refreshNav() {
+        positionNav()
+        updateNav()
+      }
+
       function positionNav() {
         var el = port()
         if (!el || !engine.nav) return
         var r = el.getBoundingClientRect()
         var c = engine.nav
-        c.style.right = Math.max(8, window.innerWidth - r.right + 12) + 'px'
-        c.style.top = r.top + 'px'
-        c.style.bottom = (window.innerHeight - r.bottom) + 'px'
+        // sit the column where the shipped "Back to bottom" button lives, so
+        // the jump-to-bottom button fleshes out that single arrow into a full
+        // vertical set of page handles on the right edge
+        var ref = document.querySelector('.Md3f7G_toBottom')
+        var rr = ref ? ref.getBoundingClientRect() : null
+        var rightX, bottomY
+        if (rr && rr.width > 0 && rr.height > 0) {
+          rightX = rr.right
+          bottomY = rr.bottom
+          // remember the button's offset from the scrollport edges so the
+          // column can hold its spot once the button hides at the bottom
+          engine.navLastOffsetX = r.right - rr.right
+          engine.navLastOffsetY = r.bottom - rr.bottom
+        } else if (engine.navLastOffsetX !== null) {
+          rightX = r.right - engine.navLastOffsetX
+          bottomY = r.bottom - engine.navLastOffsetY
+        } else {
+          rightX = r.right - 182
+          bottomY = r.bottom - 188
+        }
+        c.style.right = Math.max(8, window.innerWidth - rightX) + 'px'
+        c.style.bottom = (window.innerHeight - bottomY) + 'px'
+        c.style.top = 'auto'
       }
 
       function updateNav() {
@@ -1957,12 +1986,9 @@
         '.dsh-cp-keybtn-rec{color:var(--dsw-alias-state-business-primary,#7c8cff);border-color:var(--dsw-alias-state-business-primary,#7c8cff)}',
         '.dsh-cp-keywarn{color:var(--dsw-alias-state-error-primary,#d33);font-size:12px;width:100%}',
         '.dsh-cp-maint{align-items:center;gap:10px;flex-direction:column;display:flex}',
-        '.dsh-cp-nav{position:fixed;z-index:1000;pointer-events:none}',
-        '.dsh-cp-nav-cluster{position:absolute;right:0;display:flex;flex-direction:column;gap:8px;pointer-events:auto}',
-        '.dsh-cp-nav-top{top:12px}',
-        '.dsh-cp-nav-bottom{bottom:12px}',
-        '.dsh-cp-navbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.14));background:var(--dsw-alias-tooltip-bg,#fff);color:var(--dsw-alias-label-secondary,#555);box-shadow:var(--dsw-shadow-lv2,0 6px 24px rgba(0,0,0,.14))}',
-        '.dsh-cp-navbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary,#222)}',
+        '.dsh-cp-nav{position:fixed;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:auto}',
+        '.dsh-cp-navbtn{width:34px;height:34px;border-radius:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(148,163,184,.26);background:rgb(44,44,46);color:rgb(238,240,251);box-shadow:rgba(0,0,0,.02) 0 4px 12px 0,rgba(0,0,0,.04) 0 2px 8px 0}',
+        '.dsh-cp-navbtn:hover{background:rgb(58,58,61)}',
         '.dsh-cp-navbtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#7c8cff);outline-offset:1px}',
         '.dsh-cp-navbtn[hidden]{display:none}'
       ].join('\n')
