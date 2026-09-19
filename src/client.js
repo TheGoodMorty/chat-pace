@@ -853,28 +853,15 @@
           rightX = r.right - engine.navLastOffsetX
           bottomY = r.bottom - engine.navLastOffsetY
         } else {
-          // no measurement yet (fresh load parked at an end): the arrow's
-          // sticky slot pads it out to the text column's edge, and the
-          // composer bar is centered in that same column, so it marks the
-          // same spot on any viewport width
-          var slot = document.querySelector('.Md3f7G_toBottomSlot')
-          var sr = slot ? slot.getBoundingClientRect() : null
-          var comp = document.querySelector('.wSkVaW_composerSeat')
-          var cr = comp ? comp.getBoundingClientRect() : null
-          if (sr && sr.width > 0) {
-            var pad = parseFloat(getComputedStyle(slot).paddingRight) || 0
-            rightX = sr.right - pad
-            bottomY = sr.bottom
-            engine.navLastOffsetX = r.right - rightX
-            engine.navLastOffsetY = r.bottom - bottomY
-          } else if (cr && cr.width > 0 && cr.height > 0) {
-            rightX = cr.right
-            bottomY = cr.top - 4
-          } else {
-            var inset = r.width >= 900 ? 182 : 12
-            rightX = r.right - inset
-            bottomY = r.bottom - 188
-          }
+          // no measurement yet (fresh load parked at an end, before the
+          // arrow has ever mounted): the text column is 800px wide, centered
+          // in the port, and the arrow rides its right edge ~30px in - this
+          // fits both measured windows exactly (1104px port -> 182px inset,
+          // 1961px port -> 610.5px inset) and collapses to the right edge
+          // on narrow phone-style ports
+          var inset = Math.max(30, (r.width - 800) / 2 + 30)
+          rightX = r.right - inset
+          bottomY = r.bottom - 188
           // the arrow may mount late (or outside the observed port on
           // alternate layouts); poll briefly so we snap to its exact spot
           armNavRetry()
