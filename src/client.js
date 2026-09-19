@@ -248,7 +248,9 @@
         navWinResize: null,
         navMo: null,
         navLastOffsetX: null,
-        navLastOffsetY: null
+        navLastOffsetY: null,
+        navRetryTimer: 0,
+        navRetries: 0
       }
 
       var statusListeners = new Set()
@@ -804,6 +806,7 @@
       }
 
       function removeNav() {
+        clearNavRetry()
         if (engine.navScrollHandler && engine.el) {
           engine.el.removeEventListener('scroll', engine.navScrollHandler)
         }
@@ -818,6 +821,9 @@
       }
 
       function refreshNav() {
+        // any real event (scroll/resize/content growth) grants a fresh
+        // polling budget for the shipped button to show up
+        engine.navRetries = 0
         positionNav()
         updateNav()
       }
@@ -840,16 +846,58 @@
           // column can hold its spot once the button hides at the bottom
           engine.navLastOffsetX = r.right - rr.right
           engine.navLastOffsetY = r.bottom - rr.bottom
-        } else if (engine.navLastOffsetX !== null) {
-          rightX = r.right - engine.navLastOffsetX
-          bottomY = r.bottom - engine.navLastOffsetY
+          clearNavRetry()
         } else {
-          rightX = r.right - 182
-          bottomY = r.bottom - 188
+          // the shipped button is not rendered right now (it hides near both
+          // ends of the chat, and some layouts render it outside the port we
+          // observe); fall back to its sticky slot's content box, which pads
+          // the button out to the text column's right edge
+          var slot = document.querySelector('.Md3f7G_toBottomSlot')
+          var sr = slot ? slot.getBoundingClientRect() : null
+          if (sr && sr.width > 0) {
+            var pad = parseFloat(getComputedStyle(slot).paddingRight) || 0
+            rightX = sr.right - pad
+            bottomY = sr.bottom
+            engine.navLastOffsetX = r.right - rightX
+            engine.navLastOffsetY = r.bottom - bottomY
+          } else if (engine.navLastOffsetX !== null) {
+            rightX = r.right - engine.navLastOffsetX
+            bottomY = r.bottom - engine.navLastOffsetY
+          } else {
+            // no reference at all yet: the desktop text column sits ~182px in
+            // from the port's right edge, but a narrow viewport (phone) has no
+            // centering margin, so hug the right edge like the shipped button
+            var inset = r.width >= 900 ? 182 : 12
+            rightX = r.right - inset
+            bottomY = r.bottom - 188
+          }
+          // keep the column from riding into the composer on tall-composer
+          // layouts, and from leaving the port's box entirely
+          var comp = document.querySelector('.wSkVaW_composerSeat')
+          var cr = comp ? comp.getBoundingClientRect() : null
+          if (cr && cr.height > 0) bottomY = Math.min(bottomY, cr.top - 4)
+          rightX = Math.min(rightX, r.right - 8)
+          // the shipped button may render late (or outside the observed port
+          // on alternate layouts); poll briefly so we snap to its exact spot
+          armNavRetry()
         }
         c.style.right = Math.max(8, window.innerWidth - rightX) + 'px'
         c.style.bottom = (window.innerHeight - bottomY) + 'px'
         c.style.top = 'auto'
+      }
+
+      function armNavRetry() {
+        if (engine.navRetryTimer || engine.navRetries >= 5) return
+        engine.navRetries++
+        engine.navRetryTimer = setTimeout(function () {
+          engine.navRetryTimer = 0
+          if (engine.nav) positionNav()
+        }, 1200)
+      }
+
+      function clearNavRetry() {
+        if (engine.navRetryTimer) { clearTimeout(engine.navRetryTimer); engine.navRetryTimer = 0 }
+        engine.navRetries = 0
       }
 
       function updateNav() {
@@ -1988,7 +2036,8 @@
         '.dsh-cp-keywarn{color:var(--dsw-alias-state-error-primary,#d33);font-size:12px;width:100%}',
         '.dsh-cp-maint{align-items:center;gap:10px;flex-direction:column;display:flex}',
         '.dsh-cp-nav{position:fixed;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:auto}',
-        '.dsh-cp-navbtn{width:34px;height:34px;border-radius:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(148,163,184,.26);background:rgb(44,44,46);color:rgb(238,240,251);box-shadow:rgba(0,0,0,.02) 0 4px 12px 0,rgba(0,0,0,.04) 0 2px 8px 0}',
+        '.dsh-cp-navbtn{width:34px;height:34px;border-radius:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(148,163,184,.26);background:rgb(44,44,46);color:rgb(238,240,251);box-shadow:rgba(0,0,0,.02) 0 4px 12px 0,rgba(0,0,0,.04) 0 2px 8px 0;opacity:.6;transition:opacity .15s}',
+        '.dsh-cp-navbtn:hover,.dsh-cp-navbtn:focus-visible{opacity:1}',
         '.dsh-cp-navbtn:hover{background:rgb(58,58,61)}',
         '.dsh-cp-navbtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#7c8cff);outline-offset:1px}',
         '.dsh-cp-navbtn[hidden]{display:none}'
