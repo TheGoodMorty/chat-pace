@@ -833,52 +833,50 @@
         if (!el || !engine.nav) return
         var r = el.getBoundingClientRect()
         var c = engine.nav
-        // sit the column where the shipped "Back to bottom" button lives, so
-        // the jump-to-bottom button fleshes out that single arrow into a full
-        // vertical set of page handles on the right edge
+        // the column replaces the shipped "Back to bottom" arrow, which CSS
+        // hides without unmounting (visibility:hidden keeps its box, so the
+        // rect below stays measurable). Tie to that exact spot whenever the
+        // app keeps the arrow mounted.
         var ref = document.querySelector('.Md3f7G_toBottom')
         var rr = ref ? ref.getBoundingClientRect() : null
         var rightX, bottomY
         if (rr && rr.width > 0 && rr.height > 0) {
           rightX = rr.right
           bottomY = rr.bottom
-          // remember the button's offset from the scrollport edges so the
-          // column can hold its spot once the button hides at the bottom
+          // remember the arrow's offset from the scrollport edges so the
+          // column can hold its spot once the app unmounts the arrow near
+          // the top and bottom of the chat
           engine.navLastOffsetX = r.right - rr.right
           engine.navLastOffsetY = r.bottom - rr.bottom
           clearNavRetry()
+        } else if (engine.navLastOffsetX !== null) {
+          rightX = r.right - engine.navLastOffsetX
+          bottomY = r.bottom - engine.navLastOffsetY
         } else {
-          // the shipped button is not rendered right now (it hides near both
-          // ends of the chat, and some layouts render it outside the port we
-          // observe); fall back to its sticky slot's content box, which pads
-          // the button out to the text column's right edge
+          // no measurement yet (fresh load parked at an end): the arrow's
+          // sticky slot pads it out to the text column's edge, and the
+          // composer bar is centered in that same column, so it marks the
+          // same spot on any viewport width
           var slot = document.querySelector('.Md3f7G_toBottomSlot')
           var sr = slot ? slot.getBoundingClientRect() : null
+          var comp = document.querySelector('.wSkVaW_composerSeat')
+          var cr = comp ? comp.getBoundingClientRect() : null
           if (sr && sr.width > 0) {
             var pad = parseFloat(getComputedStyle(slot).paddingRight) || 0
             rightX = sr.right - pad
             bottomY = sr.bottom
             engine.navLastOffsetX = r.right - rightX
             engine.navLastOffsetY = r.bottom - bottomY
-          } else if (engine.navLastOffsetX !== null) {
-            rightX = r.right - engine.navLastOffsetX
-            bottomY = r.bottom - engine.navLastOffsetY
+          } else if (cr && cr.width > 0 && cr.height > 0) {
+            rightX = cr.right
+            bottomY = cr.top - 4
           } else {
-            // no reference at all yet: the desktop text column sits ~182px in
-            // from the port's right edge, but a narrow viewport (phone) has no
-            // centering margin, so hug the right edge like the shipped button
             var inset = r.width >= 900 ? 182 : 12
             rightX = r.right - inset
             bottomY = r.bottom - 188
           }
-          // keep the column from riding into the composer on tall-composer
-          // layouts, and from leaving the port's box entirely
-          var comp = document.querySelector('.wSkVaW_composerSeat')
-          var cr = comp ? comp.getBoundingClientRect() : null
-          if (cr && cr.height > 0) bottomY = Math.min(bottomY, cr.top - 4)
-          rightX = Math.min(rightX, r.right - 8)
-          // the shipped button may render late (or outside the observed port
-          // on alternate layouts); poll briefly so we snap to its exact spot
+          // the arrow may mount late (or outside the observed port on
+          // alternate layouts); poll briefly so we snap to its exact spot
           armNavRetry()
         }
         c.style.right = Math.max(8, window.innerWidth - rightX) + 'px'
@@ -1926,7 +1924,7 @@
             })),
           createElement('p', { className: 'dsh-cp-toghint' }, 'Every conversation remembers where you left it regardless of this setting, so switching to \u201cWhere I left it\u201d later still restores each one.'),
           createElement('h2', { className: 'dsh-cp-h2' }, 'Navigation buttons'),
-          createElement('p', { className: 'dsh-cp-toghint' }, 'All four round buttons stack in one vertical column at the bottom-right of the chat, filling out the built-in Back-to-bottom arrow into a full set of page handles. Each one only appears when it is useful and its toggle is on.'),
+          createElement('p', { className: 'dsh-cp-toghint' }, 'All four round buttons stack in one vertical column at the bottom-right of the chat, in the spot of the built-in Back-to-bottom arrow, which they replace (the built-in arrow is hidden while this plugin runs). Each button only appears when it is useful and its toggle is on.'),
           createElement('div', { className: 'dsh-cp-togs' },
             createElement(ToggleRow, {
               id: 'dsh-cp-t-navtop', label: 'Jump to top', hint: 'Top button of the column; jumps to the start of the conversation and hides while you are at the top.',
@@ -2036,6 +2034,10 @@
         '.dsh-cp-keywarn{color:var(--dsw-alias-state-error-primary,#d33);font-size:12px;width:100%}',
         '.dsh-cp-maint{align-items:center;gap:10px;flex-direction:column;display:flex}',
         '.dsh-cp-nav{position:fixed;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:auto}',
+        // the nav column replaces the shipped "Back to bottom" arrow: hide it
+        // from the reader (and the pointer) but keep its box in the layout so
+        // positionNav can keep measuring the spot it marks
+        '.Md3f7G_toBottom{visibility:hidden!important;pointer-events:none!important}',
         '.dsh-cp-navbtn{width:34px;height:34px;border-radius:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(148,163,184,.26);background:rgb(44,44,46);color:rgb(238,240,251);box-shadow:rgba(0,0,0,.02) 0 4px 12px 0,rgba(0,0,0,.04) 0 2px 8px 0;opacity:.6;transition:opacity .15s}',
         '.dsh-cp-navbtn:hover,.dsh-cp-navbtn:focus-visible{opacity:1}',
         '.dsh-cp-navbtn:hover{background:rgb(58,58,61)}',
